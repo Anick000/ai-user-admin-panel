@@ -64,52 +64,48 @@ pip install -r requirements.txt
 You can set your Groq API key in two ways:
 
 Option 1 (Recommended): .env file
+  Create a file named .env in the root folder:
+  GROQ_API_KEY=your_groq_api_key_here
 
-Create a file named .env in the root folder:
-
-GROQ_API_KEY=your_groq_api_key_here
+  
 Option 2: Environment variable
 Windows (PowerShell)
-setx GROQ_API_KEY "your_key_here"
-
-Restart terminal after this.
+  setx GROQ_API_KEY "your_key_here"
+  Restart terminal after this.
 
 Mac/Linux
 export GROQ_API_KEY="your_key_here"
-▶️ Running the Project
 
+
+
+▶️ Running the Project
 ⚠️ Make sure to run BOTH servers in separate terminals.
 
 Step 1: Start MCP Server
-python -m uvicorn app.mcp.mcp_server:app --port 8001 --reload
-
-Runs on:
-http://127.0.0.1:8001
+  python -m uvicorn app.mcp.mcp_server:app --port 8001 --reload
+  
+  Runs on:
+  http://127.0.0.1:8001
 
 Step 2: Start FastAPI Backend
-python -m uvicorn app.main:app --reload
-
-Runs on:
-http://127.0.0.1:8000
-
-Swagger UI:
-http://127.0.0.1:8000/docs
+  python -m uvicorn app.main:app --reload
+  
+  Runs on:
+  http://127.0.0.1:8000
+  
+  Swagger UI:
+  http://127.0.0.1:8000/docs
 
 Step 3: Open Dashboard
-
-Open the file:
-
-dashboard.html
-
-in your browser.
+  Open the file: dashboard.html in your browser.
 
 💬 Example Commands
-create a user named Rahul with email rahul@gmail.com
-show all users
-update Rahul email to rahul123@gmail.com
-delete Rahul
-📌 Notes
+  create a user named Rahul with email rahul@gmail.com
+  show all users
+  update Rahul email to rahul123@gmail.com
+  delete Rahul
 
+📌 Notes
 Data is stored in-memory (resets when server restarts)
 
 MCP server handles tool execution
