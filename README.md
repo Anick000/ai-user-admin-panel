@@ -37,11 +37,11 @@ User Tools
 
 ## 🛠 Tech Stack
 
-- FastAPI
-- Python
-- Groq LLM
-- MCP (Model Context Protocol)
-- HTML / CSS / JavaScript
+- FastAPI  
+- Python  
+- Groq LLM  
+- MCP (Model Context Protocol)  
+- HTML / CSS / JavaScript  
 
 ---
 
@@ -52,8 +52,13 @@ User Tools
 ```bash
 git clone https://github.com/YOUR_USERNAME/ai-user-admin-panel.git
 cd ai-user-admin-panel
-2. Install dependencies
+```
+
+### 2. Install dependencies
+
+```bash
 pip install -r requirements.txt
+```
 🔐 API Key Setup
 
 You can set your Groq API key in two ways:
@@ -79,18 +84,17 @@ Step 1: Start MCP Server
 python -m uvicorn app.mcp.mcp_server:app --port 8001 --reload
 
 Runs on:
-
 http://127.0.0.1:8001
+
 Step 2: Start FastAPI Backend
 python -m uvicorn app.main:app --reload
 
 Runs on:
-
 http://127.0.0.1:8000
 
 Swagger UI:
-
 http://127.0.0.1:8000/docs
+
 Step 3: Open Dashboard
 
 Open the file:
@@ -100,9 +104,6 @@ dashboard.html
 in your browser.
 
 💬 Example Commands
-
-Try these in the dashboard:
-
 create a user named Rahul with email rahul@gmail.com
 show all users
 update Rahul email to rahul123@gmail.com
