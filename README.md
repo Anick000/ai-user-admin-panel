@@ -79,6 +79,7 @@ export GROQ_API_KEY="your_key_here"
 
 
 ▶️ Running the Project
+
 ⚠️ Make sure to run BOTH servers in separate terminals.
 
 Step 1: Start MCP Server
@@ -100,12 +101,14 @@ Step 3: Open Dashboard
   Open the file: dashboard.html in your browser.
 
 💬 Example Commands
+
   create a user named Rahul with email rahul@gmail.com
   show all users
   update Rahul email to rahul123@gmail.com
   delete Rahul
 
 📌 Notes
+
 Data is stored in-memory (resets when server restarts)
 
 MCP server handles tool execution
