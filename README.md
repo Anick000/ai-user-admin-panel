@@ -4,20 +4,24 @@ An AI-powered user management system built using **FastAPI, MCP tools, and LLM a
 
 Users can manage accounts using natural language commands through an AI dashboard.
 
-Example commands:
+---
 
-- create a user named Rahul with email rahul@gmail.com
-- show all users
-- update Rahul email to rahul123@gmail.com
-- delete Rahul
+## ✨ Features
+
+- Natural language user management
+- AI tool calling using LLM
+- MCP protocol integration
+- ChatGPT-style admin dashboard UI
+- Name → user_id resolution automatically
+- Full CRUD operations (Create, Read, Update, Delete)
 
 ---
 
-## Architecture
+## 🧠 Architecture
 
 Frontend Dashboard  
 ↓  
-FastAPI API  
+FastAPI Backend (Port 8000)  
 ↓  
 AI Agent  
 ↓  
@@ -25,35 +29,73 @@ Groq LLM
 ↓  
 MCP Client  
 ↓  
-MCP Server Tools  
+MCP Server (Port 8001)  
+↓  
+User Tools  
 
 ---
 
-## Features
-
-- Natural language user management
-- AI tool calling using LLM
-- MCP protocol integration
-- ChatGPT-style admin dashboard
-- Name → user_id resolution automatically
-- Create / Read / Update / Delete users
-
----
-
-## Tech Stack
+## 🛠 Tech Stack
 
 - FastAPI
 - Python
 - Groq LLM
 - MCP (Model Context Protocol)
-- HTML / CSS / JS dashboard
+- HTML / CSS / JavaScript
 
 ---
 
-## Installation
+## 🚀 Installation & Setup
+1. Clone the repository
+    git clone https://github.com/YOUR_USERNAME/ai-user-admin-panel.git
+    cd ai-user-admin-panel
+    
+2. Install dependencies
+   pip install -r requirements.txt
+   
+🔐 API Key Setup- You can set your Groq API key in two ways:
 
-Clone the repo
+Option 1 (Recommended): .env file
+    Create a file named .env in the root folder:
+    GROQ_API_KEY=your_groq_api_key_here
+    
+Option 2: Environment variable
+    Windows (PowerShell)
+    setx GROQ_API_KEY "your_key_here"  
+    Restart terminal after this.
 
-```bash
-git clone https://github.com/YOUR_USERNAME/ai-user-admin-panel.git
-cd ai-user-admin-panel
+Mac/Linux
+    export GROQ_API_KEY="your_key_here"
+
+    
+▶️ Running the Project
+⚠️ Make sure to run BOTH servers in separate terminals.
+
+Step 1: Start MCP Server
+    python -m uvicorn app.mcp.mcp_server:app --port 8001 --reload
+    Runs on:
+    http://127.0.0.1:8001
+
+Step 2: Start FastAPI Backend
+    python -m uvicorn app.main:app --reload
+    Runs on:
+    http://127.0.0.1:8000
+      
+    Swagger UI:
+    http://127.0.0.1:8000/docs
+
+Step 3: Open Dashboard
+    Open the file: dashboard.html in your browser.
+
+💬 Example Commands
+Try these in the dashboard:
+    create a user named Rahul with email rahul@gmail.com
+    show all users
+    update Rahul email to rahul123@gmail.com
+    delete Rahul
+
+
+📌 Notes
+    Data is stored in-memory (resets when server restarts)
+    MCP server handles tool execution
+    AI agent converts prompts → structured tool calls
