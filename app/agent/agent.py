@@ -118,11 +118,6 @@ Format:
                 if tool not in tool_names:
                     return {"error": f"Invalid tool requested: {tool}"}
 
-                # ---------------------------
-                # Fix incorrect user_id usage
-                # Example:
-                # "user_id": "Rahul"
-                # ---------------------------
                 if "user_id" in args and isinstance(args["user_id"], str):
 
                     if not re.match(r"[0-9a-f-]{36}", args["user_id"]):
