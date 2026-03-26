@@ -4,7 +4,10 @@ import re
 from groq import Groq
 from mcp import ClientSession
 from mcp.client.sse import sse_client
+from dotenv import load_dotenv
 
+
+load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
@@ -17,9 +20,8 @@ class UserAgent:
 
                 await session.initialize()
 
-                # ---------------------------
                 # Load MCP tools
-                # ---------------------------
+                
                 tools = await session.list_tools()
 
                 tool_descriptions = [
@@ -32,9 +34,9 @@ class UserAgent:
 
                 tool_names = [t.name for t in tools.tools]
 
-                # ---------------------------
+                
                 # System prompt for LLM
-                # ---------------------------
+                
                 system_prompt = f"""
 You are an AI agent that manages users.
 
@@ -76,9 +78,9 @@ Format:
 }}
 """
 
-                # ---------------------------
+                
                 # Call LLM
-                # ---------------------------
+                
                 response = client.chat.completions.create(
                     model="llama-3.1-8b-instant",
                     messages=[
@@ -91,9 +93,9 @@ Format:
 
                 print("LLM response:", text)
 
-                # ---------------------------
+                
                 # Extract JSON from response
-                # ---------------------------
+                
                 match = re.search(r"\{.*\}", text, re.DOTALL)
 
                 if not match:
@@ -112,26 +114,26 @@ Format:
                 tool = tool_call.get("tool")
                 args = tool_call.get("arguments", {})
 
-                # ---------------------------
+                
                 # Validate tool
-                # ---------------------------
+                
                 if tool not in tool_names:
                     return {"error": f"Invalid tool requested: {tool}"}
 
-                # ---------------------------
+                
                 # Fix incorrect user_id usage
                 # Example:
                 # "user_id": "Rahul"
-                # ---------------------------
+                
                 if "user_id" in args and isinstance(args["user_id"], str):
 
                     if not re.match(r"[0-9a-f-]{36}", args["user_id"]):
                         args["name"] = args["user_id"]
                         args.pop("user_id")
 
-                # ---------------------------
+                
                 # Resolve name → user_id
-                # ---------------------------
+                
                 if tool in ["update_user_tool", "delete_user_tool"]:
 
                     if "user_id" not in args:
@@ -166,9 +168,11 @@ Format:
                     # remove name because MCP tool expects user_id
                     args.pop("name", None)
 
-                # ---------------------------
+                
                 # Execute tool
-                # ---------------------------
+                
                 result = await session.call_tool(tool, args)
 
                 return result
+            
+            
