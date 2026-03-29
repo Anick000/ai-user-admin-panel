@@ -1,115 +1,123 @@
-# AI User Admin Panel
+# Multi-Agent + Multi-MCP User Admin Panel
 
-An AI-powered user management system built using **FastAPI, MCP tools, and LLM agents**.
+This project now supports:
+- Multiple MCP servers
+- Multiple agents
+- Tool-level access control per agent (ACL)
 
-Users can manage accounts using natural language commands through an AI dashboard.
+## Current architecture
 
----
+- FastAPI backend: `http://127.0.0.1:8000`
+- MCP Server 1 (User CRUD): `http://127.0.0.1:8001/sse`
+- MCP Server 2 (User Insights): `http://127.0.0.1:8002/sse`
+- Agents with restricted tool access in `app/agent/acl.py`
 
-## ✨ Features
+## Tool matrix
 
-- Natural language user management
-- AI tool calling using LLM
-- MCP protocol integration
-- ChatGPT-style admin dashboard UI
-- Name → user_id resolution automatically
-- Full CRUD operations (Create, Read, Update, Delete)
+### MCP Server 1 (CRUD)
+- `create_user_tool`
+- `get_users_tool`
+- `update_user_tool`
+- `delete_user_tool`
 
----
+### MCP Server 2 (Insights)
+- `get_user_count_tool`
+- `find_user_by_email_tool`
+- `find_user_by_name_tool`
+- `get_latest_user_tool`
 
-## 🧠 Architecture
+## Agent permissions (security ACL)
 
-Frontend Dashboard  
-↓  
-FastAPI Backend (Port 8000)  
-↓  
-AI Agent  
-↓  
-Groq LLM  
-↓  
-MCP Client  
-↓  
-MCP Server (Port 8001)  
-↓  
-User Tools  
+- `agent1`
+  - `mcp1/create_user_tool`
+  - `mcp2/get_user_count_tool`
 
----
+- `agent2`
+  - `mcp1/get_users_tool`
+  - `mcp2/find_user_by_email_tool`
+  - `mcp2/find_user_by_name_tool`
 
-## 🛠 Tech Stack
+- `agent3`
+  - `mcp1/update_user_tool`
+  - `mcp2/get_latest_user_tool`
 
-- FastAPI  
-- Python  
-- Groq LLM  
-- MCP (Model Context Protocol)  
-- HTML / CSS / JavaScript  
+Agents are hard-restricted. Even if the LLM requests another tool, execution is blocked by server-side validation.
 
----
+## Setup
 
-## 🚀 Installation & Setup
-
-### 1. Clone the repository
+1. Install dependencies:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ai-user-admin-panel.git
-cd ai-user-admin-panel
+pip install -r requirements.txt
 ```
 
-### 2. Install dependencies
+2. Create `.env` file:
 
-pip install -r requirements.txt
-🔐 API Key Setup
+```env
+GROQ_API_KEY=your_groq_api_key
+```
 
-You can set your Groq API key in two ways:
+## Run all services
 
-Option 1 (Recommended): .env file
+Open 3 terminals:
 
-Create a file named .env in the root folder:
+1. Start FastAPI backend:
 
-GROQ_API_KEY=your_groq_api_key_here
-Option 2: Environment variable
-Windows (PowerShell)
-setx GROQ_API_KEY "your_key_here"
+```bash
+python -m uvicorn app.main:app --port 8000 --reload
+```
 
-Restart terminal after this.
+2. Start MCP Server 1:
 
-Mac/Linux
-export GROQ_API_KEY="your_key_here"
-▶️ Running the Project
-
-⚠️ Make sure to run BOTH servers in separate terminals.
-
-Step 1: Start MCP Server
+```bash
 python -m uvicorn app.mcp.mcp_server:app --port 8001 --reload
+```
 
-Runs on:
-http://127.0.0.1:8001
+3. Start MCP Server 2:
 
-Step 2: Start FastAPI Backend
-python -m uvicorn app.main:app --reload
+```bash
+python -m uvicorn app.mcp.mcp_server_2:app --port 8002 --reload
+```
 
-Runs on:
-http://127.0.0.1:8000
+## API endpoints
 
-Swagger UI:
-http://127.0.0.1:8000/docs
+- `GET /agents`  
+  Lists agents and allowed tools.
 
-Step 3: Open Dashboard
+- `POST /agents/{agent_name}/chat?prompt=...`  
+  Runs a prompt through a specific agent.
 
-Open the file:
+- `POST /chat?prompt=...`  
+  Backward-compatible route. Uses `agent1`.
 
-dashboard.html
+## Examples
 
-in your browser.
+### Agent1 (allowed)
+- `create user named Ravi with email ravi@example.com`
+- `how many users are there`
 
-💬 Example Commands
-create a user named Rahul with email rahul@gmail.com
-show all users
-update Rahul email to rahul123@gmail.com
-delete Rahul
-📌 Notes
+### Agent1 (blocked)
+- `show all users` (not in agent1 ACL)
 
-Data is stored in-memory (resets when server restarts)
+### Agent2 (allowed)
+- `show all users`
+- `find user with email ravi@example.com`
 
-MCP server handles tool execution
+### Agent3 (allowed)
+- `update user Rahul email to rahul_new@example.com using target_name Rahul`
+- `show latest user`
 
-AI agent converts prompts → structured tool calls
+## How to add more servers/agents/tools
+
+1. Add a new MCP server file under `app/mcp/` and expose `app = mcp.sse_app()`.
+2. Add server URL in `MCP_SERVERS` (`app/agent/acl.py`).
+3. Add tools in that MCP server with `@mcp.tool()`.
+4. Add or update agent permission entries in `AGENT_PERMISSIONS`.
+5. Restart backend + MCP servers.
+
+## Security checklist
+
+- Keep ACL in code (`app/agent/acl.py`) and review before deploy.
+- Never rely only on prompt instructions; always enforce tool checks in runtime.
+- Give each agent minimum required tools (principle of least privilege).
+- Prefer read-only tools for support/reporting agents.
