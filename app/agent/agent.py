@@ -1,67 +1,68 @@
 import json
 import os
-import re
 from contextlib import AsyncExitStack
-from typing import Dict, Tuple
 
 from dotenv import load_dotenv
-from groq import Groq
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_groq import ChatGroq
 from mcp import ClientSession
 from mcp.client.sse import sse_client
-
-from app.agent.acl import AGENT_PERMISSIONS, MCP_SERVERS
+from app.agent.acl_store import get_agent_config, get_mcp_servers
+from app.agent.langfuse_tracing import flush_langfuse, get_langfuse_callbacks
+from app.agent.tool_access import (
+    build_allowed_tool_registry,
+    call_registered_tool,
+    get_tool_descriptions,
+    validate_tool_choice,
+)
 
 
 load_dotenv()
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+DEFAULT_MODEL = "llama-3.1-8b-instant"
+TOOL_CHOICE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", "{system_prompt}"),
+        ("human", "{prompt}"),
+    ]
+)
 
 
 class MultiMCPAgent:
     def __init__(self, agent_name: str):
-        if agent_name not in AGENT_PERMISSIONS:
+        agent_config = get_agent_config(agent_name)
+        if agent_config is None:
             raise ValueError(f"Unknown agent: {agent_name}")
 
         self.agent_name = agent_name
-        self.agent_config = AGENT_PERMISSIONS[agent_name]
+        self.agent_config = agent_config
+        self.llm = ChatGroq(
+            model=os.getenv("GROQ_MODEL", DEFAULT_MODEL),
+            temperature=0,
+            api_key=os.getenv("GROQ_API_KEY"),
+        )
+        self.tool_choice_chain = TOOL_CHOICE_PROMPT | self.llm | JsonOutputParser()
 
     async def run(self, prompt: str):
         allowed_refs = set(self.agent_config["allowed_tools"])
-        tool_registry: Dict[str, Tuple[ClientSession, str, dict]] = {}
+        mcp_servers = get_mcp_servers()
 
         async with AsyncExitStack() as stack:
             sessions = {}
 
-            for server_name, url in MCP_SERVERS.items():
+            for server_name, url in mcp_servers.items():
                 streams = await stack.enter_async_context(sse_client(url))
                 session = await stack.enter_async_context(ClientSession(*streams))
                 await session.initialize()
                 sessions[server_name] = session
 
-            for server_name, session in sessions.items():
-                tools = await session.list_tools()
-                for t in tools.tools:
-                    full_ref = f"{server_name}/{t.name}"
-                    if full_ref in allowed_refs:
-                        tool_registry[full_ref] = (session, t.name, t.inputSchema)
+            tool_registry = await build_allowed_tool_registry(sessions, allowed_refs)
 
             if not tool_registry:
                 return {"error": f"No allowed tools configured for {self.agent_name}"}
 
-            direct_tool, direct_args = self._try_direct_tool_choice(prompt, set(tool_registry.keys()))
-            if direct_tool:
-                session, tool_name, _ = tool_registry[direct_tool]
-                result = await session.call_tool(tool_name, direct_args)
-                parsed_result = self._parse_mcp_result(result)
-                return {
-                    "agent": self.agent_name,
-                    "tool": direct_tool,
-                    "result": parsed_result,
-                }
-
-            tool_descriptions = [
-                {"name": full_ref, "schema": schema}
-                for full_ref, (_, _, schema) in tool_registry.items()
-            ]
+            tool_descriptions = get_tool_descriptions(tool_registry)
 
             system_prompt = f"""
 You are {self.agent_name}.
@@ -80,37 +81,40 @@ Rules:
 }}
 """
 
-            response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-            )
-
-            text = response.choices[0].message.content.strip()
-            match = re.search(r"\{.*\}", text, re.DOTALL)
-            if not match:
-                return {"error": f"No JSON found in LLM output: {text}"}
-
-            json_text = re.sub(r"//.*", "", match.group())
-
             try:
-                tool_call = json.loads(json_text)
-            except Exception:
-                return {"error": f"Invalid JSON from LLM: {text}"}
+                callbacks = get_langfuse_callbacks()
+                invoke_config = {
+                    "run_name": f"{self.agent_name}-tool-choice",
+                    "tags": ["mcp-user-server", self.agent_name],
+                    "metadata": {
+                        "langfuse_session_id": self.agent_name,
+                        "agent_name": self.agent_name,
+                        "allowed_tools": sorted(tool_registry.keys()),
+                    },
+                }
+                if callbacks:
+                    invoke_config["callbacks"] = callbacks
+
+                tool_call = await self.tool_choice_chain.ainvoke(
+                    {
+                        "system_prompt": system_prompt,
+                        "prompt": prompt,
+                    },
+                    config=invoke_config,
+                )
+            except Exception as exc:
+                return {"error": f"Invalid JSON from LangChain LLM output: {exc}"}
+            finally:
+                flush_langfuse()
 
             full_ref = tool_call.get("tool")
             args = tool_call.get("arguments", {})
 
-            if full_ref not in tool_registry:
-                return {
-                    "error": f"Tool not allowed for {self.agent_name}: {full_ref}",
-                    "allowed_tools": sorted(tool_registry.keys()),
-                }
+            tool_error = validate_tool_choice(self.agent_name, full_ref, tool_registry)
+            if tool_error:
+                return tool_error
 
-            session, tool_name, _ = tool_registry[full_ref]
-            result = await session.call_tool(tool_name, args)
+            result = await call_registered_tool(tool_registry, full_ref, args)
             parsed_result = self._parse_mcp_result(result)
 
             return {
@@ -118,58 +122,6 @@ Rules:
                 "tool": full_ref,
                 "result": parsed_result,
             }
-
-    def _try_direct_tool_choice(self, prompt: str, available_tools: set):
-        p = prompt.lower().strip()
-        p_compact = re.sub(r"\s+", " ", p)
-
-        all_users_phrases = [
-            "all users",
-            "all user",
-            "show users",
-            "show all",
-            "list users",
-            "get users",
-            "users list",
-            "all usera",
-        ]
-        if any(phrase in p_compact for phrase in all_users_phrases):
-            if "mcp1/get_users_tool" in available_tools:
-                return "mcp1/get_users_tool", {}
-
-        if re.search(r"\b(show|list|get|display)\b.*\b(all )?users\b", p):
-            if "mcp1/get_users_tool" in available_tools:
-                return "mcp1/get_users_tool", {}
-
-        if re.search(r"\b(count|total|how many)\b.*\busers?\b", p):
-            if "mcp2/get_user_count_tool" in available_tools:
-                return "mcp2/get_user_count_tool", {}
-
-        if re.search(r"\b(latest|last)\b.*\buser\b", p):
-            if "mcp2/get_latest_user_tool" in available_tools:
-                return "mcp2/get_latest_user_tool", {}
-
-        email_match = re.search(r"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})", prompt)
-        if email_match and "mcp2/find_user_by_email_tool" in available_tools:
-            return "mcp2/find_user_by_email_tool", {"email": email_match.group(1)}
-
-        # Name-based lookup patterns:
-        # "find user Rahul", "find user by name Rahul", "get user named Rahul"
-        if "mcp2/find_user_by_name_tool" in available_tools:
-            by_name_match = re.search(
-                r"\b(?:find|get|search|lookup)\s+(?:for\s+)?user(?:\s+(?:by|with)\s+name)?\s+(?:named\s+)?([a-zA-Z][a-zA-Z .'-]{1,60})\b",
-                prompt,
-                re.IGNORECASE,
-            )
-            if by_name_match:
-                name = by_name_match.group(1).strip()
-                return "mcp2/find_user_by_name_tool", {"name": name}
-
-            named_match = re.search(r"\buser\s+named\s+([a-zA-Z][a-zA-Z .'-]{1,60})\b", prompt, re.IGNORECASE)
-            if named_match and not email_match:
-                return "mcp2/find_user_by_name_tool", {"name": named_match.group(1).strip()}
-
-        return None, None
 
     def _parse_mcp_result(self, result):
         if not result or not getattr(result, "content", None):
